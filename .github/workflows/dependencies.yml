@@ -13,6 +13,13 @@ permissions:
 defaults:
   run:
     shell: bash
+env:
+  CARGO_UPGRADES_VER: --version=1.3.6
+  PR_TITLE: Weekly `cargo update`
+  PR_MESSAGE: |
+    In addition to the semver-compatible updates in this PR,
+    the following major upgrades are also available:
+
 jobs:
   update-open-pr:
     name: update dependencies and amend PR
@@ -26,8 +33,12 @@ jobs:
         with:
           fetch-depth: 2
           submodules: recursive
+      - name: install the latest nightly
+        run: |
+          rustup toolchain install nightly
+          rustup default nightly
       - name: install cargo-upgrades
-        run: cargo install -f cargo-upgrades
+        run: cargo install -f cargo-upgrades $CARGO_UPGRADES_VER
 
       - name: cargo update
         run: cargo update
@@ -36,12 +47,8 @@ jobs:
         run: cargo upgrades > cargo_upgrades.stdout || exit 0
 
       - name: craft PR body
-        env:
-          MESSAGE: |
-            In addition to the semver-compatible updates in this PR,
-            the following major upgrades are also available:
         run: |
-          echo "${MESSAGE}" > body.md
+          echo "${PR_MESSAGE}" > body.md
           echo '```txt' >> body.md
           # Convert absolute paths to relative paths
           sed "s#$(pwd)/##" cargo_upgrades.stdout >> body.md
@@ -53,7 +60,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh pr edit cargo_update --title 'Weekly `cargo update`' --body-file body.md --repo $GITHUB_REPOSITORY
+          gh pr edit cargo_update --title "${PR_TITLE}" --body-file body.md --repo $GITHUB_REPOSITORY
           gh pr reopen cargo_update --repo $GITHUB_REPOSITORY
       - name: commit and push
         run: |
@@ -67,4 +74,4 @@ jobs:
         if: steps.edit.outcome != 'success'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr create --title 'Weekly `cargo update`' --body-file body.md --repo $GITHUB_REPOSITORY
+        run: gh pr create --title "${PR_TITLE}" --body-file body.md --repo $GITHUB_REPOSITORY
