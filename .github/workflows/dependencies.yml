@@ -18,6 +18,7 @@ jobs:
     name: update dependencies and amend PR
     runs-on: ubuntu-latest
     permissions:
+      contents: write
       pull-requests: write
     steps:
       - name: checkout the source code
