@@ -14,8 +14,11 @@ defaults:
   run:
     shell: bash
 jobs:
-  update:
+  update-open-pr:
+    name: update dependencies and amend PR
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
     steps:
       - name: checkout the source code
         uses: actions/checkout@v3
@@ -24,27 +27,14 @@ jobs:
           submodules: recursive
       - name: install cargo-upgrades
         run: cargo install -f cargo-upgrades
+
       - name: cargo update
         run: cargo update
       - name: cargo upgrades
         # cargo-upgrade exits 7 if upgrades are available, ignore that
         run: cargo upgrades > cargo_upgrades.stdout || exit 0
 
-  open-pr:
-    needs: update
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-    steps:
-      - name: commit and push
-        run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          git switch -C cargo_update
-          git add ./Cargo.lock
-          git commit --no-verify -m "cargo update"
-          git push --no-verify -u origin cargo_update
-      - name: craft message
+      - name: craft PR body
         env:
           MESSAGE: |
             In addition to the semver-compatible updates in this PR,
@@ -55,9 +45,25 @@ jobs:
           # Convert absolute paths to relative paths
           sed "s#$(pwd)/##" cargo_upgrades.stdout >> body.md
           echo '```' >> body.md
-      - name: update pull request
+
+      - name: edit and reopen existing pull request
+        id: edit
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: >
-          gh pr edit --title 'Weekly `cargo update`' --body-file body.md --repo $GITHUB_REPOSITORY ||
-          gh pr create --title 'Weekly `cargo update`' --body-file body.md --repo $GITHUB_REPOSITORY
+        run: |
+          gh pr edit cargo_update --title 'Weekly `cargo update`' --body-file body.md --repo $GITHUB_REPOSITORY
+          gh pr reopen cargo_update --repo $GITHUB_REPOSITORY
+      - name: commit and push
+        if: success() || failure()
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git switch -C cargo_update
+          git add ./Cargo.lock
+          git commit --no-verify -m "cargo update"
+          git push --no-verify -f -u origin cargo_update
+      - name: open new pull request
+        if: failure() && steps.edit.conclusion == 'failure'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr create --title 'Weekly `cargo update`' --body-file body.md --repo $GITHUB_REPOSITORY
