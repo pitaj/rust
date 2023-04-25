@@ -24,9 +24,6 @@ jobs:
   update:
     name: update dependencies
     runs-on: ubuntu-latest
-    outputs:
-      lock: ${{ steps.lock.outputs.lock }}
-      upgrades: ${{ steps.upgrades.outputs.upgrades }}
     steps:
       - name: checkout the source code
         uses: actions/checkout@v3
@@ -42,31 +39,22 @@ jobs:
 
       - name: cargo update
         run: cargo update
-      - name: output Cargo.lock for use in PR
-        id: lock
-        run: |
-          # Read Cargo.lock into an output
-          LOCK="$(cat Cargo.lock)"
-          # Escape LF/CR because outputs must be a single line
-          LOCK="${LOCK//'%'/'%25'}"
-          LOCK="${LOCK//$'\n'/'%0A'}"
-          LOCK="${LOCK//$'\r'/'%0D'}"
-          echo "lock=${LOCK}" >> "$GITHUB_OUTPUT"
+      - name: upload Cargo.lock artifact for use in PR
+        uses: actions/upload-artifact@v3
+        with:
+          name: Cargo-lock
+          path: Cargo.lock
+          retention-days: 1
 
       - name: cargo upgrades
         # cargo-upgrade exits 7 if upgrades are available, ignore that
         run: cargo upgrades > cargo_upgrades.stdout || exit 0
       - name: output upgrades for use in PR
-        id: upgrades
-        run: |
-          # Read cargo_upgrades.stdout into an output
-          # Convert absolute paths to relative paths
-          UPGRADES="$(sed "s#$(pwd)/##" cargo_upgrades.stdout)"
-          # Escape LF/CR because outputs must be a single line
-          UPGRADES="${UPGRADES//'%'/'%25'}"
-          UPGRADES="${UPGRADES//$'\n'/'%0A'}"
-          UPGRADES="${UPGRADES//$'\r'/'%0D'}"
-          echo "upgrades=${UPGRADES}" >> "$GITHUB_OUTPUT"
+        uses: actions/upload-artifact@v3
+        with:
+          name: cargo-upgrades
+          path: cargo-upgrades.stdout
+          retention-days: 1
 
   pr:
     name: amend PR
@@ -79,28 +67,20 @@ jobs:
       - name: checkout the source code
         uses: actions/checkout@v3
 
-      - name: get Cargo.lock from update job
-        env:
-          LOCK: ${{ needs.update.outputs.lock }}
-        run: |
-          # Un-escape
-          LOCK="${LOCK//'%0D'/$'\r'}"
-          LOCK="${LOCK//'%0A'/$'\n'}"
-          LOCK="${LOCK//'%25'/'%'}"
-          # Write to file
-          echo "${LOCK}" > Cargo.lock
-      - name: craft PR body
-        env:
-          UPGRADES: ${{ needs.update.outputs.upgrades }}
-        run: |
-          # Un-escape
-          UPGRADES="${UPGRADES//'%0D'/$'\r'}"
-          UPGRADES="${UPGRADES//'%0A'/$'\n'}"
-          UPGRADES="${UPGRADES//'%25'/'%'}"
+      - name: download Cargo.lock from update job
+        uses: actions/download-artifact@v3
+        with:
+          name: Cargo-lock
+      - name: download cargo-upgrades from update job
+        uses: actions/download-artifact@v3
+        with:
+          name: cargo-upgrades
 
+      - name: craft PR body
+        run: |
           echo "${PR_MESSAGE}" > body.md
           echo '```txt' >> body.md
-          echo "${UPGRADES}" >> body.md
+          cat cargo-upgrades.stdout >> body.md
           echo '```' >> body.md
 
       - name: edit and reopen existing pull request
