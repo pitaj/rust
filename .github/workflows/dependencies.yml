@@ -49,13 +49,13 @@ jobs:
 
       - name: edit and reopen existing pull request
         id: edit
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh pr edit cargo_update --title 'Weekly `cargo update`' --body-file body.md --repo $GITHUB_REPOSITORY
           gh pr reopen cargo_update --repo $GITHUB_REPOSITORY
       - name: commit and push
-        if: success() || failure()
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
@@ -64,7 +64,7 @@ jobs:
           git commit --no-verify -m "cargo update"
           git push --no-verify -f -u origin cargo_update
       - name: open new pull request
-        if: failure() && steps.edit.conclusion == 'failure'
+        if: steps.edit.outcome != 'success'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh pr create --title 'Weekly `cargo update`' --body-file body.md --repo $GITHUB_REPOSITORY
