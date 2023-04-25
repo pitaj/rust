@@ -1,0 +1,59 @@
+# Automatically run `cargo update` periodically
+
+---
+name: Bump dependencies in Cargo.lock
+on:
+  schedule:
+    # Run weekly
+    - cron: '0 0 * * Sun'
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout the source code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+      - name: cargo update
+        run: cargo update
+      - name: install cargo-upgrades
+        run: cargo install -f cargo-upgrades
+      - name: cargo upgrades
+        run: cargo upgrades > cargo_upgrades.stdout
+
+  open-pr:
+    needs: update
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: commit and push
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git switch -C cargo_update
+          git add ./Cargo.lock
+          git commit --no-verify -m "cargo update"
+          git push --no-verify -u origin cargo_update
+      - name: craft message
+        env:
+          MESSAGE: |
+            In addition to the semver-compatible updates in this PR,
+            the following major upgrades are also available:
+        run: |
+          echo "${MESSAGE}" > body.md
+          echo '```txt' >> body.md
+          # Convert absolute paths to relative paths
+          sed "s#$(pwd)/##" cargo_upgrades.stdout >> body.md
+          echo '```' >> body.md
+      - name: update pull request
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          gh pr edit --title 'Weekly `cargo update`' --body-file body.md --repo $GITHUB_REPOSITORY ||
+          gh pr create --title 'Weekly `cargo update`' --body-file body.md --repo $GITHUB_REPOSITORY
