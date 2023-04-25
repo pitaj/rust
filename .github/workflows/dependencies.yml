@@ -22,12 +22,13 @@ jobs:
         with:
           fetch-depth: 2
           submodules: recursive
-      - name: cargo update
-        run: cargo update
       - name: install cargo-upgrades
         run: cargo install -f cargo-upgrades
+      - name: cargo update
+        run: cargo update
       - name: cargo upgrades
-        run: cargo upgrades > cargo_upgrades.stdout
+        # cargo-upgrade exits 7 if upgrades are available, ignore that
+        run: cargo upgrades > cargo_upgrades.stdout || exit 0
 
   open-pr:
     needs: update
