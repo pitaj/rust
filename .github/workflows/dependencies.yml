@@ -49,11 +49,11 @@ jobs:
       - name: cargo upgrades
         # cargo-upgrade exits 7 if upgrades are available, ignore that
         run: cargo upgrades > cargo_upgrades.stdout || exit 0
-      - name: output upgrades for use in PR
+      - name: upload upgrades artifact for use in PR
         uses: actions/upload-artifact@v3
         with:
           name: cargo-upgrades
-          path: cargo-upgrades.stdout
+          path: cargo_upgrades.stdout
           retention-days: 1
 
   pr:
@@ -80,7 +80,7 @@ jobs:
         run: |
           echo "${PR_MESSAGE}" > body.md
           echo '```txt' >> body.md
-          cat cargo-upgrades.stdout >> body.md
+          cat cargo_upgrades.stdout >> body.md
           echo '```' >> body.md
 
       - name: edit and reopen existing pull request
