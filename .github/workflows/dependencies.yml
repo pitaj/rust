@@ -21,12 +21,12 @@ env:
     the following major upgrades are also available:
 
 jobs:
-  update-open-pr:
-    name: update dependencies and amend PR
+  update:
+    name: update dependencies
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
+    outputs:
+      lock: ${{ steps.lock.outputs.lock }}
+      upgrades: ${{ steps.upgrades.outputs.upgrades }}
     steps:
       - name: checkout the source code
         uses: actions/checkout@v3
@@ -42,16 +42,65 @@ jobs:
 
       - name: cargo update
         run: cargo update
+      - name: output Cargo.lock for use in PR
+        id: lock
+        run: |
+          # Read Cargo.lock into an output
+          LOCK="$(cat Cargo.lock)"
+          # Escape LF/CR because outputs must be a single line
+          LOCK="${LOCK//'%'/'%25'}"
+          LOCK="${LOCK//$'\n'/'%0A'}"
+          LOCK="${LOCK//$'\r'/'%0D'}"
+          echo "lock=${LOCK}" >> "$GITHUB_OUTPUT"
+
       - name: cargo upgrades
         # cargo-upgrade exits 7 if upgrades are available, ignore that
         run: cargo upgrades > cargo_upgrades.stdout || exit 0
-
-      - name: craft PR body
+      - name: output upgrades for use in PR
+        id: upgrades
         run: |
+          # Read cargo_upgrades.stdout into an output
+          # Convert absolute paths to relative paths
+          UPGRADES="$(sed "s#$(pwd)/##" cargo_upgrades.stdout)"
+          # Escape LF/CR because outputs must be a single line
+          UPGRADES="${UPGRADES//'%'/'%25'}"
+          UPGRADES="${UPGRADES//$'\n'/'%0A'}"
+          UPGRADES="${UPGRADES//$'\r'/'%0D'}"
+          echo "upgrades=${UPGRADES}" >> "$GITHUB_OUTPUT"
+
+  pr:
+    name: amend PR
+    needs: update
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: checkout the source code
+        uses: actions/checkout@v3
+
+      - name: get Cargo.lock from update job
+        env:
+          LOCK: ${{ needs.update.outputs.lock }}
+        run: |
+          # Un-escape
+          LOCK="${LOCK//'%0D'/$'\r'}"
+          LOCK="${LOCK//'%0A'/$'\n'}"
+          LOCK="${LOCK//'%25'/'%'}"
+          # Write to file
+          echo "${LOCK}" > Cargo.lock
+      - name: craft PR body
+        env:
+          UPGRADES: ${{ needs.update.outputs.upgrades }}
+        run: |
+          # Un-escape
+          UPGRADES="${UPGRADES//'%0D'/$'\r'}"
+          UPGRADES="${UPGRADES//'%0A'/$'\n'}"
+          UPGRADES="${UPGRADES//'%25'/'%'}"
+
           echo "${PR_MESSAGE}" > body.md
           echo '```txt' >> body.md
-          # Convert absolute paths to relative paths
-          sed "s#$(pwd)/##" cargo_upgrades.stdout >> body.md
+          echo "${UPGRADES}" >> body.md
           echo '```' >> body.md
 
       - name: edit and reopen existing pull request
@@ -71,6 +120,7 @@ jobs:
           git commit --no-verify -m "cargo update"
           git push --no-verify -f -u origin cargo_update
       - name: open new pull request
+        # Only run if there wasn't an existing PR
         if: steps.edit.outcome != 'success'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
