@@ -39,8 +39,7 @@ jobs:
           rustup default $TOOLCHAIN
 
       - name: cargo update
-        # `cargo update` outputs to stderr
-        run: cargo update 2>&1 > cargo_update.log
+        run: cargo update 2>&1 | tee -a cargo_update.log
       - name: upload Cargo.lock artifact for use in PR
         uses: actions/upload-artifact@v3
         with:
