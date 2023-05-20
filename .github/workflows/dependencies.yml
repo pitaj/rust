@@ -19,8 +19,7 @@ env:
   PR_MESSAGE: |
     Automation to keep dependencies in `Cargo.lock` current.
 
-    In addition to the semver-compatible updates in this PR,
-    the following major upgrades are also available:
+    The following is the output from `cargo update`:
 
 jobs:
   update:
@@ -36,28 +35,23 @@ jobs:
           # Extract the stage0 version
           TOOLCHAIN=$(jq -r '.compiler | {version,date} | join("-")' -- src/stage0.json)
           # Install and set as default
-          rustup toolchain install $TOOLCHAIN
+          rustup toolchain install --no-self-update --profile minimal $TOOLCHAIN
           rustup default $TOOLCHAIN
-      - name: install cargo-upgrades
-        run: cargo install -f cargo-upgrades $CARGO_UPGRADES_VER
 
       - name: cargo update
-        run: cargo update
+        # `cargo update` outputs to stderr
+        run: cargo update 2>&1 > cargo_update.log
       - name: upload Cargo.lock artifact for use in PR
         uses: actions/upload-artifact@v3
         with:
           name: Cargo-lock
           path: Cargo.lock
           retention-days: 1
-
-      - name: cargo upgrades
-        # cargo-upgrade exits 7 if upgrades are available, ignore that
-        run: cargo upgrades > cargo_upgrades.stdout || exit 0
-      - name: upload upgrades artifact for use in PR
+      - name: upload cargo-update log artifact for use in PR
         uses: actions/upload-artifact@v3
         with:
-          name: cargo-upgrades
-          path: cargo_upgrades.stdout
+          name: cargo-updates
+          path: cargo_update.log
           retention-days: 1
 
   pr:
@@ -75,16 +69,16 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: Cargo-lock
-      - name: download cargo-upgrades from update job
+      - name: download cargo-update log from update job
         uses: actions/download-artifact@v3
         with:
-          name: cargo-upgrades
+          name: cargo-updates
 
       - name: craft PR body
         run: |
           echo "${PR_MESSAGE}" > body.md
           echo '```txt' >> body.md
-          cat cargo_upgrades.stdout >> body.md
+          cat cargo_update.log >> body.md
           echo '```' >> body.md
 
       - name: commit
