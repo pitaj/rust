@@ -20,6 +20,7 @@ env:
     Automation to keep dependencies in `Cargo.lock` current.
 
     The following is the output from `cargo update`:
+  COMMIT_MESSAGE: "cargo update \n\n"
 
 jobs:
   update:
@@ -39,7 +40,8 @@ jobs:
           rustup default $TOOLCHAIN
 
       - name: cargo update
-        run: cargo update 2>&1 | tee -a cargo_update.log
+        # Remove first line that always just says "Updating crates.io index"
+        run: cargo update 2>&1 | sed '/crates.io index/d' | tee -a cargo_update.log
       - name: upload Cargo.lock artifact for use in PR
         uses: actions/upload-artifact@v3
         with:
@@ -73,8 +75,11 @@ jobs:
         with:
           name: cargo-updates
 
-      - name: craft PR body
+      - name: craft PR body and commit message
         run: |
+          echo "${COMMIT_MESSAGE}" > commit.txt
+          cat cargo_update.log >> commit.txt
+
           echo "${PR_MESSAGE}" > body.md
           echo '```txt' >> body.md
           cat cargo_update.log >> body.md
@@ -86,7 +91,7 @@ jobs:
           git config user.email github-actions@github.com
           git switch -C cargo_update
           git add ./Cargo.lock
-          git commit --no-verify -m "cargo update"
+          git commit --no-verify --file=commit.txt
 
       - name: edit and reopen existing pull request
         id: edit
