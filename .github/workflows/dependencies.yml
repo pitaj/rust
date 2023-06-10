@@ -22,7 +22,7 @@ env:
   COMMIT_MESSAGE: "cargo update \n\n"
 
 jobs:
-  waiting-on-bors:
+  not-waiting-on-bors:
     name: skip if S-waiting-on-bors
     runs-on: ubuntu-latest
     steps:
@@ -42,6 +42,7 @@ jobs:
 
   update:
     name: update dependencies
+    needs: not-waiting-on-bors
     runs-on: ubuntu-latest
     steps:
       - name: checkout the source code
