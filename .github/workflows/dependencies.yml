@@ -14,7 +14,6 @@ defaults:
   run:
     shell: bash
 env:
-  CARGO_UPGRADES_VER: --version=1.3.6
   PR_TITLE: Weekly `cargo update`
   PR_MESSAGE: |
     Automation to keep dependencies in `Cargo.lock` current.
@@ -23,6 +22,24 @@ env:
   COMMIT_MESSAGE: "cargo update \n\n"
 
 jobs:
+  waiting-on-bors:
+    name: skip if S-waiting-on-bors
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Fetch state and labels of PR
+          # Or exit successfully if PR does not exist
+          JSON=$(gh pr view cargo_update --repo $GITHUB_REPOSITORY --json labels,state || exit 0)
+          STATE=$(echo "$JSON" | jq -r '.state')
+          WAITING_ON_BORS=$(echo "$JSON" | jq '.labels[] | any(.name == "S-waiting-on-bors"; .)')
+
+          # Exit with error if open and S-waiting-on-bors
+          if [[ "$STATE" == "OPEN" && "$WAITING_ON_BORS" == "true" ]]; then
+            exit 1
+          fi
+
   update:
     name: update dependencies
     runs-on: ubuntu-latest
@@ -93,19 +110,23 @@ jobs:
           git add ./Cargo.lock
           git commit --no-verify --file=commit.txt
 
-      - name: edit and reopen existing pull request
+      - name: push
+        run: git push --no-verify -f -u origin cargo_update
+
+      - name: edit existing open pull request
         id: edit
         # Don't fail job if we need to open new PR
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh pr edit cargo_update --title "${PR_TITLE}" --body-file body.md --repo $GITHUB_REPOSITORY
-          gh pr reopen cargo_update --repo $GITHUB_REPOSITORY
+          # Exit with error if PR is closed
+          STATE=$(gh pr view cargo_update --repo $GITHUB_REPOSITORY --json state --jq '.state')
+          if [[ "$STATE" != "OPEN" ]]; then
+            exit 1
+          fi
 
-      - name: push
-        # Must push after reopening PR because of a Github quirk
-        run: git push --no-verify -f -u origin cargo_update
+          gh pr edit cargo_update --title "${PR_TITLE}" --body-file body.md --repo $GITHUB_REPOSITORY
 
       - name: open new pull request
         # Only run if there wasn't an existing PR
