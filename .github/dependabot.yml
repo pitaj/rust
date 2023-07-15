@@ -6,7 +6,7 @@ updates:
     directory: "/"
     schedule:
       # interval: "weekly"
-      interval: daily # for testing purposes
+      interval: daily # for testing purposes (bump)
       time: "21:00"
       timezone: "America/Denver"
     open-pull-requests-limit: 1
