@@ -5,7 +5,10 @@ updates:
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
-      interval: "weekly"
+      # interval: "weekly"
+      interval: daily # for testing purposes
+      time: "21:00"
+      timezone: "America/Denver"
     open-pull-requests-limit: 1
     versioning-strategy: lockfile-only
     # Update all dependencies in a single PR
