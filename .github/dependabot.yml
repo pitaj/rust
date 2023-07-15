@@ -11,6 +11,9 @@ updates:
       timezone: "America/Denver"
     open-pull-requests-limit: 1
     versioning-strategy: lockfile-only
+    # Allow both direct and indirect updates for all packages
+    allow:
+      - dependency-type: "all"
     # Update all dependencies in a single PR
     groups:
       dependencies:
