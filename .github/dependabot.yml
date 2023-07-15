@@ -1,0 +1,15 @@
+# Configure dependabot to weekly bump all dependencies in Cargo.lock
+
+version: 2
+updates:
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 1
+    versioning-strategy: lockfile-only
+    # Update all dependencies in a single PR
+    groups:
+      dependencies:
+        patterns:
+          - "*"
