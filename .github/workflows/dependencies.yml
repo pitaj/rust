@@ -1,4 +1,7 @@
 # Automatically run `cargo update` periodically
+#
+# Requires setting a `CARGO_UPDATE_TOKEN` Actions Repository secret
+# to a Github API access token.
 
 ---
 name: Bump dependencies in Cargo.lock
@@ -16,6 +19,8 @@ defaults:
 env:
   # So cargo doesn't complain about unstable features
   RUSTC_BOOTSTRAP: 1
+
+  # User-facing text
   PR_TITLE: Weekly `cargo update`
   PR_MESSAGE: |
     Automation to keep dependencies in `Cargo.lock` current.
@@ -23,18 +28,24 @@ env:
     The following is the output from `cargo update`:
   COMMIT_MESSAGE: "cargo update \n\n"
 
+  # Name to use for the branch
+  BRANCH: cargo_update
+  # Github repository to open the PR on
+  BASE_REPO: rust-lang/rust
+
 jobs:
   not-waiting-on-bors:
-    if: github.repository_owner == 'rust-lang'
+    # Only run workflow if on rust-lang-ci
+    if: github.repository_owner == 'rust-lang-ci'
     name: skip if S-waiting-on-bors
     runs-on: ubuntu-latest
     steps:
       - env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.CARGO_UPDATE_TOKEN }}
         run: |
           # Fetch state and labels of PR
           # Or exit successfully if PR does not exist
-          JSON=$(gh pr view cargo_update --repo $GITHUB_REPOSITORY --json labels,state || exit 0)
+          JSON=$(gh pr view "${GITHUB_REPOSITORY_OWNER}:${BRANCH}" --repo "$BASE_REPO" --json labels,state || exit 0)
           STATE=$(echo "$JSON" | jq -r '.state')
           WAITING_ON_BORS=$(echo "$JSON" | jq '.labels[] | any(.name == "S-waiting-on-bors"; .)')
 
@@ -44,7 +55,6 @@ jobs:
           fi
 
   update:
-    if: github.repository_owner == 'rust-lang'
     name: update dependencies
     needs: not-waiting-on-bors
     runs-on: ubuntu-latest
@@ -78,13 +88,11 @@ jobs:
           retention-days: 1
 
   pr:
-    if: github.repository_owner == 'rust-lang'
     name: amend PR
     needs: update
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
     steps:
       - name: checkout the source code
         uses: actions/checkout@v3
@@ -112,31 +120,31 @@ jobs:
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git switch --force-create cargo_update
+          git switch --force-create "$BRANCH"
           git add ./Cargo.lock
           git commit --no-verify --file=commit.txt
 
       - name: push
-        run: git push --no-verify --force --set-upstream origin cargo_update
+        run: git push --no-verify --force --set-upstream origin "$BRANCH"
 
       - name: edit existing open pull request
         id: edit
         # Don't fail job if we need to open new PR
         continue-on-error: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.CARGO_UPDATE_TOKEN }}
         run: |
           # Exit with error if PR is closed
-          STATE=$(gh pr view cargo_update --repo $GITHUB_REPOSITORY --json state --jq '.state')
+          STATE=$(gh pr view "${GITHUB_REPOSITORY_OWNER}:${BRANCH}" --repo "$BASE_REPO" --json state --jq '.state')
           if [[ "$STATE" != "OPEN" ]]; then
             exit 1
           fi
 
-          gh pr edit cargo_update --title "${PR_TITLE}" --body-file body.md --repo $GITHUB_REPOSITORY
+          gh pr edit "${GITHUB_REPOSITORY_OWNER}:${BRANCH}" --title "${PR_TITLE}" --body-file body.md --repo "$BASE_REPO"
 
       - name: open new pull request
         # Only run if there wasn't an existing PR
         if: steps.edit.outcome != 'success'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr create --title "${PR_TITLE}" --body-file body.md --repo $GITHUB_REPOSITORY
+          GITHUB_TOKEN: ${{ secrets.CARGO_UPDATE_TOKEN }}
+        run: gh pr create --title "${PR_TITLE}" --body-file body.md --repo "$BASE_REPO"
