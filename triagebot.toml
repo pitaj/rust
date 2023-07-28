@@ -310,6 +310,10 @@ message_on_add = """\
 Issue #{number} "{title}" has been added.
 """
 
+[no-merges]
+exclude_labels = ["rollup", "sync"]
+labels = ["has-merge-commits", "S-waiting-on-author"]
+
 [github-releases]
 format = "rustc"
 project-name = "Rust"
