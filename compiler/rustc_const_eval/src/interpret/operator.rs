@@ -512,6 +512,7 @@ impl<'tcx, M: Machine<'tcx>> InterpCx<'tcx, M> {
         arg_ty: Ty<'tcx>,
     ) -> InterpResult<'tcx, ImmTy<'tcx, M::Provenance>> {
         use rustc_middle::mir::NullOp::*;
+        use rustc_middle::mir::RuntimeChecks::*;
 
         let layout = self.layout_of(arg_ty)?;
         let usize_layout = || self.layout_of(self.tcx.types.usize).unwrap();
@@ -536,7 +537,8 @@ impl<'tcx, M: Machine<'tcx>> InterpCx<'tcx, M> {
                     self.tcx.offset_of_subfield(self.typing_env, layout, fields.iter()).bytes();
                 ImmTy::from_uint(val, usize_layout())
             }
-            UbChecks => ImmTy::from_bool(M::ub_checks(self)?, *self.tcx),
+            RuntimeChecks(UbChecks) => ImmTy::from_bool(M::ub_checks(self)?, *self.tcx),
+            RuntimeChecks(OverflowChecks) => ImmTy::from_bool(M::overflow_checks(self)?, *self.tcx),
         })
     }
 }

@@ -855,8 +855,8 @@ fn codegen_stmt<'tcx>(
                                 fields.iter(),
                             )
                             .bytes(),
-                        NullOp::UbChecks => {
-                            let val = fx.tcx.sess.ub_checks();
+                        NullOp::RuntimeChecks(kind) => {
+                            let val = kind.value(fx.tcx.sess);
                             let val = CValue::by_val(
                                 fx.bcx.ins().iconst(types::I8, i64::try_from(val).unwrap()),
                                 fx.layout_of(fx.tcx.types.bool),

@@ -1143,6 +1143,10 @@ impl<'tcx> Machine<'tcx> for MiriMachine<'tcx> {
         interp_ok(ecx.tcx.sess.ub_checks())
     }
 
+    fn overflow_checks(ecx: &InterpCx<'tcx, Self>) -> InterpResult<'tcx, bool> {
+        interp_ok(ecx.tcx.sess.overflow_checks())
+    }
+
     fn thread_local_static_pointer(
         ecx: &mut MiriInterpCx<'tcx>,
         def_id: DefId,

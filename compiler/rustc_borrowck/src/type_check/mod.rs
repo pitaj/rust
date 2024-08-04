@@ -1631,7 +1631,7 @@ impl<'a, 'tcx> TypeChecker<'a, 'tcx> {
                     ConstraintCategory::SizedBound,
                 );
             }
-            &Rvalue::NullaryOp(NullOp::UbChecks, _) => {}
+            &Rvalue::NullaryOp(NullOp::RuntimeChecks(_), _) => {}
 
             Rvalue::ShallowInitBox(operand, ty) => {
                 self.check_operand(operand, location);

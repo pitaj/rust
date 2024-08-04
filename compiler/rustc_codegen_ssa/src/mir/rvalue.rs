@@ -736,8 +736,8 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                             .bytes();
                         bx.cx().const_usize(val)
                     }
-                    mir::NullOp::UbChecks => {
-                        let val = bx.tcx().sess.ub_checks();
+                    mir::NullOp::RuntimeChecks(kind) => {
+                        let val = kind.value(bx.tcx().sess);
                         bx.cx().const_bool(val)
                     }
                 };

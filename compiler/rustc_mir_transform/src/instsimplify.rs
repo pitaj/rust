@@ -191,7 +191,7 @@ impl<'tcx> InstSimplifyContext<'_, 'tcx> {
     }
 
     fn simplify_ub_check(&self, rvalue: &mut Rvalue<'tcx>) {
-        if let Rvalue::NullaryOp(NullOp::UbChecks, _) = *rvalue {
+        if let Rvalue::NullaryOp(NullOp::RuntimeChecks(RuntimeChecks::UbChecks), _) = *rvalue {
             let const_ = Const::from_bool(self.tcx, self.tcx.sess.ub_checks());
             let constant = ConstOperand { span: DUMMY_SP, const_, user_ty: None };
             *rvalue = Rvalue::Use(Operand::Constant(Box::new(constant)));
