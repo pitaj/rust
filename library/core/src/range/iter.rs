@@ -1,6 +1,7 @@
 use crate::iter::{
     FusedIterator, Step, TrustedLen, TrustedRandomAccess, TrustedRandomAccessNoCoerce, TrustedStep,
 };
+use crate::mem;
 use crate::num::NonZero;
 use crate::range::{Range, RangeFrom, RangeInclusive, legacy};
 
@@ -168,7 +169,7 @@ impl<A: Step> IterRangeInclusive<A> {
     }
 }
 
-#[unstable(feature = "trusted_random_access", issue = "none")]
+#[unstable(feature = "new_range_api", issue = "125687")]
 impl<A: Step> Iterator for IterRangeInclusive<A> {
     type Item = A;
 
@@ -293,32 +294,120 @@ range_incl_exact_iter_impl! {
 /// By-value [`RangeFrom`] iterator.
 #[unstable(feature = "new_range_api", issue = "125687")]
 #[derive(Debug, Clone)]
-pub struct IterRangeFrom<A>(legacy::RangeFrom<A>);
+pub struct IterRangeFrom<A> {
+    /// Whether the maximum of `A` has already been yielded.
+    #[allow(dead_code)] // FIXME(bootstrap)
+    exhausted: bool,
+    start: A,
+}
 
-impl<A> IterRangeFrom<A> {
+impl<A: Step> IterRangeFrom<A> {
     /// Returns the remainder of the range being iterated over.
+    #[inline]
+    #[rustc_inherit_overflow_checks]
     pub fn remainder(self) -> RangeFrom<A> {
-        RangeFrom { start: self.0.start }
+        #[cfg(not(bootstrap))]
+        if crate::intrinsics::overflow_checks() && self.exhausted {
+            Step::forward(self.start, 1);
+            unreachable!("should have overflowed by now");
+        }
+        RangeFrom { start: self.start }
     }
 }
 
-#[unstable(feature = "trusted_random_access", issue = "none")]
+/// doop
+/// ```
+/// #![feature(new_range_api)]
+///
+/// use core::iter;
+/// use core::range;
+///
+/// for (a, b) in iter::zip(0_u32..256, range::RangeFrom::from(0_u8..)) {
+///     assert_eq!(a, u32::from(b));
+/// }
+///
+/// let mut a = range::RangeFrom::from(0_u8..).into_iter();
+/// let mut b = 0_u8..;
+/// assert_eq!(a.next(), b.next());
+/// assert_eq!(a.nth(5), b.nth(5));
+/// assert_eq!(a.nth(0), b.next());
+///
+/// let mut a = range::RangeFrom::from(0_u8..).into_iter();
+/// let mut b = 0_u8..;
+/// assert_eq!(a.nth(5), b.nth(5));
+/// assert_eq!(a.nth(0), b.next());
+///
+/// let mut a = range::RangeFrom::from(0_u8..).into_iter();
+/// let mut b = 0_u32..;
+/// assert_eq!(a.nth(255).map(u32::from), b.nth(255));
+/// ```
+///
+/// ```should_panic
+/// #![feature(new_range_api)]
+/// use core::range;
+///
+/// for _ in range::RangeFrom::from(0_u8..) {}
+/// ```
+///
+/// ```should_panic
+/// #![feature(new_range_api)]
+/// use core::range;
+///
+/// let mut it = range::RangeFrom::from(0_u8..).into_iter();
+/// it.nth(256);
+/// ```
+#[unstable(feature = "new_range_api", issue = "125687")]
 impl<A: Step> Iterator for IterRangeFrom<A> {
     type Item = A;
 
     #[inline]
+    #[rustc_inherit_overflow_checks]
     fn next(&mut self) -> Option<A> {
-        self.0.next()
+        #[cfg(not(bootstrap))]
+        if crate::intrinsics::overflow_checks() {
+            if self.exhausted {
+                Step::forward(self.start.clone(), 1);
+            }
+
+            if Step::forward_checked(self.start.clone(), 1).is_none() {
+                self.exhausted = true;
+                return Some(self.start.clone());
+            }
+        }
+
+        let n = Step::forward(self.start.clone(), 1);
+        Some(mem::replace(&mut self.start, n))
     }
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        self.0.size_hint()
+        (usize::MAX, None)
     }
 
     #[inline]
+    #[rustc_inherit_overflow_checks]
     fn nth(&mut self, n: usize) -> Option<A> {
-        self.0.nth(n)
+        #[cfg(not(bootstrap))]
+        if crate::intrinsics::overflow_checks() {
+            if self.exhausted {
+                Step::forward(self.start.clone(), 1);
+            }
+
+            let plus_n = Step::forward(self.start.clone(), n);
+
+            if Step::forward_checked(plus_n.clone(), 1).is_none() {
+                self.exhausted = true;
+                self.start = plus_n.clone();
+                return Some(plus_n);
+            }
+
+            self.start = Step::forward(plus_n.clone(), 1);
+            return Some(plus_n);
+        }
+
+        let plus_n = Step::forward(self.start.clone(), n);
+        self.start = Step::forward(plus_n.clone(), 1);
+        Some(plus_n)
     }
 }
 
@@ -333,7 +422,8 @@ impl<A: Step> IntoIterator for RangeFrom<A> {
     type Item = A;
     type IntoIter = IterRangeFrom<A>;
 
+    #[inline]
     fn into_iter(self) -> Self::IntoIter {
-        IterRangeFrom(self.into())
+        IterRangeFrom { exhausted: false, start: self.start }
     }
 }
